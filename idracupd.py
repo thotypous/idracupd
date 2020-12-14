@@ -25,7 +25,10 @@ def upgrade(host, port, username, password, filename, trustdb=None):
     session.headers.update(
         {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:85.0) Gecko/20100101 Firefox/85.0'})
 
-    base_url = 'https://%s:%d' % (host, port)
+    if port == 443:
+        base_url = 'https://%s' % (host, )
+    else:
+        base_url = 'https://%s:%d' % (host, port)
 
     r = session.get(base_url + '/session?aimGetProp=hostname,gui_str_title_bar,OEMHostName,fwVersion,sysDesc')
     r.raise_for_status()
