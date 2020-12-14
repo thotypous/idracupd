@@ -25,6 +25,9 @@ def upgrade(host, port, username, password, filename, trustdb=None):
     base_url = 'https://%s:%d' % (host, port)
 
     try:
+        r = session.get(base_url + '/login.html')
+        r.raise_for_status()
+
         while True:
             r = session.post(base_url + '/data/login',
                              data={'user': username, 'password': password})
@@ -37,7 +40,7 @@ def upgrade(host, port, username, password, filename, trustdb=None):
                     r'<blockingTime>(\d+)</blockingTime>', r.text).groups()
                 blockingTime = int(blockingTime)
                 if blockingTime == 0:
-                    raise RuntimeError('Incorrect username or password')
+                    raise RuntimeError('Incorrect username or password: ' + r.text)
                 sys.stderr.write('login blocked, waiting %d seconds\n' % blockingTime)
                 time.sleep(blockingTime)
             else:
