@@ -19,7 +19,7 @@ def upgrade(host, port, username, password, filename, trustdb=None):
     cert = get_server_cert(host, port, trustdb)
 
     session = requests.Session()
-    session.verify = False  # SelfSignedAdapter should take care of that for us
+    session.verify = False  # SelfSignedAdapter should take care of this for us
     session.mount('https://', SelfSignedAdapter(cert))
 
     base_url = 'https://%s:%d' % (host, port)
