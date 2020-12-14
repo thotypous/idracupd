@@ -8,6 +8,7 @@ import requests
 import argparse
 import sqlite3
 import socket
+import time
 import ssl
 import sys
 import os
@@ -24,19 +25,35 @@ def upgrade(host, port, username, password, filename, trustdb=None):
     base_url = 'https://%s:%d' % (host, port)
 
     try:
-        r = session.post(base_url + '/data/login',
-                         data={'user': username, 'password': password})
-        r.raise_for_status()
-        if not '<authResult>0</authResult>' in r.text:
-            raise RuntimeError('Incorrect username or password')
+        while True:
+            r = session.post(base_url + '/data/login',
+                             data={'user': username, 'password': password})
+            r.raise_for_status()
+
+            if '<authResult>0</authResult>' in r.text:
+                break
+
+            if not '<authResult>1</authResult>' in r.text:
+                raise RuntimeError('Incorrect username or password')
+            blockingTime, = re.search(
+                r'<blockingTime>(\d+)</blockingTime>', r.text).groups()
+            blockingTime = int(blockingTime)
+
+            sys.stderr.write('login blocked, waiting %d seconds\n' % blockingTime)
+            time.sleep(blockingTime)
 
         st1, st2 = re.search(
             r'ST1=([0-9a-f]+),ST2=([0-9a-f]+)', r.text).groups()
 
         r = session.get(base_url + '/cemgui/fwupdate.html')
         r.raise_for_status()
-        upload_path, = re.search(
-            r'target="submitArea" action="(.*?)/?"', r.text).groups()
+        scratch_pad, = re.search(
+            r'dupScratchPadURI = "(.*?)"', r.text).groups()
+        apply_path, = re.search(r'applyURI = "(.*?)"', r.text).groups()
+
+        # a GET with side-effects, oh my
+        r = session.get(base_url + scratch_pad + '?splock=1')
+        r.raise_for_status()
 
         e = MultipartEncoder(fields={
             'firmwareUpdate': (
@@ -46,19 +63,23 @@ def upgrade(host, port, username, password, filename, trustdb=None):
             )
         })
         m = MultipartEncoderMonitor(e, status_callback)
-        r = session.post(base_url + upload_path + '?ST1=' + st1,
+        r = session.post(base_url + scratch_pad + '?ST1=' + st1,
                          data=m,
                          headers={'Content-Type': m.content_type})
-        print(r)
-        print(r.text)
+        sys.stderr.write('\n')
+        r.raise_for_status()
+        target, = re.search(r'target="(.*?)"', r.text).groups()
+
+        xml = '<Repository><target>%s</target><rebootType>1</rebootType></Repository>' % target
+        r = session.put(base_url + apply_path, data=xml, headers={'ST2': st2})
         r.raise_for_status()
     finally:
         session.get(base_url + '/data/logout')
 
 
 def status_callback(monitor):
-    sys.stdout.write('\r%7.2f%%' % (100. * monitor.bytes_read / monitor.len))
-    sys.stdout.flush()
+    sys.stderr.write('\r%6.2f%%' % (100. * monitor.bytes_read / monitor.len))
+    sys.stderr.flush()
 
 
 def get_server_cert(host, port, trustdb=None):
