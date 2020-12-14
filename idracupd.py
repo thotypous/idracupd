@@ -29,16 +29,18 @@ def upgrade(host, port, username, password, filename, trustdb=None):
 
     r = session.get(base_url + '/session?aimGetProp=hostname,gui_str_title_bar,OEMHostName,fwVersion,sysDesc')
     r.raise_for_status()
-    print(host, r.json()['aimGetProp']['hostname'])
+    print(host, r.json['aimGetProp']['hostname'])
 
     try:
         for retry in range(3):
-            r = session.get(base_url + '/login.html')
+            login_url = base_url + '/login.html'
+            r = session.get(login_url)
             r.raise_for_status()
             session.post(base_url + '/data/logout')
 
             r = session.post(base_url + '/data/login',
-                             data={'user': username, 'password': password})
+                             data={'user': username, 'password': password},
+                             headers={'Referer': login_url})
             r.raise_for_status()
 
             if '<authResult>0</authResult>' in r.text:
