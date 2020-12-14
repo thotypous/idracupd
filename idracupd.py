@@ -32,15 +32,16 @@ def upgrade(host, port, username, password, filename, trustdb=None):
 
             if '<authResult>0</authResult>' in r.text:
                 break
-
-            if not '<authResult>1</authResult>' in r.text:
-                raise RuntimeError('Incorrect username or password')
-            blockingTime, = re.search(
-                r'<blockingTime>(\d+)</blockingTime>', r.text).groups()
-            blockingTime = int(blockingTime)
-
-            sys.stderr.write('login blocked, waiting %d seconds\n' % blockingTime)
-            time.sleep(blockingTime)
+            elif '<authResult>1</authResult>' in r.text:
+                blockingTime, = re.search(
+                    r'<blockingTime>(\d+)</blockingTime>', r.text).groups()
+                blockingTime = int(blockingTime)
+                if blockingTime == 0:
+                    raise RuntimeError('Incorrect username or password')
+                sys.stderr.write('login blocked, waiting %d seconds\n' % blockingTime)
+                time.sleep(blockingTime)
+            else:
+                raise RuntimeError('Login failure: ' + r.text)
 
         st1, st2 = re.search(
             r'ST1=([0-9a-f]+),ST2=([0-9a-f]+)', r.text).groups()
