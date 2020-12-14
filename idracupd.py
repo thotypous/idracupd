@@ -22,6 +22,8 @@ def upgrade(host, port, username, password, filename, trustdb=None):
     session.verify = False  # SelfSignedAdapter should take care of this for us
     session.mount('https://', SelfSignedAdapter(cert))
 
+    session.headers.update({'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:85.0) Gecko/20100101 Firefox/85.0'})
+
     base_url = 'https://%s:%d' % (host, port)
 
     try:
