@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.ssl_ import create_urllib3_context
+from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
 from hashlib import sha256
 import contextlib
 import requests
@@ -8,7 +9,9 @@ import argparse
 import sqlite3
 import socket
 import ssl
+import sys
 import os
+import re
 
 
 def upgrade(host, port, username, password, filename, trustdb=None):
@@ -19,8 +22,43 @@ def upgrade(host, port, username, password, filename, trustdb=None):
     session.mount('https://', SelfSignedAdapter(cert))
 
     base_url = 'https://%s:%d' % (host, port)
-    r = session.get(base_url)
-    print(r)
+
+    try:
+        r = session.post(base_url + '/data/login',
+                         data={'user': username, 'password': password})
+        r.raise_for_status()
+        if not '<authResult>0</authResult>' in r.text:
+            raise RuntimeError('Incorrect username or password')
+
+        st1, st2 = re.search(
+            r'ST1=([0-9a-f]+),ST2=([0-9a-f]+)', r.text).groups()
+
+        r = session.get(base_url + '/cemgui/fwupdate.html')
+        r.raise_for_status()
+        upload_path, = re.search(
+            r'target="submitArea" action="(.*?)/?"', r.text).groups()
+
+        e = MultipartEncoder(fields={
+            'firmwareUpdate': (
+                os.path.basename(filename),
+                open(filename, 'rb'),
+                'application/x-ms-dos-executable'
+            )
+        })
+        m = MultipartEncoderMonitor(e, status_callback)
+        r = session.post(base_url + upload_path + '?ST1=' + st1,
+                         data=m,
+                         headers={'Content-Type': m.content_type})
+        print(r)
+        print(r.text)
+        r.raise_for_status()
+    finally:
+        session.get(base_url + '/data/logout')
+
+
+def status_callback(monitor):
+    sys.stdout.write('\r%7.2f%%' % (100. * monitor.bytes_read / monitor.len))
+    sys.stdout.flush()
 
 
 def get_server_cert(host, port, trustdb=None):
@@ -33,7 +71,7 @@ def get_server_cert(host, port, trustdb=None):
         cur = con.cursor()
         cur.execute(
             "CREATE TABLE IF NOT EXISTS certs (host TEXT PRIMARY KEY, cert BLOB)")
-        
+
         cur.execute("SELECT cert FROM certs WHERE host = ?", (host, ))
         row = cur.fetchone()
         if row:
