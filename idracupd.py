@@ -2,6 +2,7 @@
 from requests.adapters import HTTPAdapter
 from requests.packages.urllib3.util.ssl_ import create_urllib3_context
 from requests_toolbelt import MultipartEncoder, MultipartEncoderMonitor
+from requests_toolbelt.adapters.fingerprint import FingerprintAdapter
 from hashlib import sha256
 import contextlib
 import requests
@@ -17,10 +18,12 @@ import re
 
 def upgrade(host, port, username, password, filename, trustdb=None):
     cert = get_server_cert(host, port, trustdb)
+    fingerprint = sha256(cert).hexdigest()
 
     session = requests.Session()
-    session.verify = False  # SelfSignedAdapter should take care of this for us
-    session.mount('https://', SelfSignedAdapter(cert))
+    # self-signed verification fails, count on FingerprintAdapter for validation
+    session.verify = False
+    session.mount('https://', FingerprintAdapter(fingerprint))
 
     session.headers.update(
         {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:85.0) Gecko/20100101 Firefox/85.0'})
@@ -124,16 +127,6 @@ def get_server_cert(host, port, trustdb=None):
             "INSERT INTO certs (host, cert) VALUES (?, ?)", (host, cert))
         con.commit()
         return cert
-
-
-class SelfSignedAdapter(HTTPAdapter):
-    def __init__(self, cert):
-        self.cert = cert
-        super().__init__()
-
-    def init_poolmanager(self, *args, **kwargs):
-        kwargs['assert_fingerprint'] = sha256(self.cert).hexdigest()
-        return super().init_poolmanager(*args, **kwargs)
 
 
 def main():
