@@ -25,7 +25,10 @@ def upgrade(host, port, username, password, filename, trustdb=None):
     base_url = 'https://%s:%d' % (host, port)
 
     try:
-        for retry in range(3):
+        for retry in range(2):
+            r = session.ger(base_url)
+            r.raise_for_status()
+
             r = session.get(base_url + '/login.html')
             r.raise_for_status()
 
