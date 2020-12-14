@@ -22,17 +22,20 @@ def upgrade(host, port, username, password, filename, trustdb=None):
     session.verify = False  # SelfSignedAdapter should take care of this for us
     session.mount('https://', SelfSignedAdapter(cert))
 
-    session.headers.update({'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:85.0) Gecko/20100101 Firefox/85.0'})
+    session.headers.update(
+        {'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64; rv:85.0) Gecko/20100101 Firefox/85.0'})
 
     base_url = 'https://%s:%d' % (host, port)
 
-    try:
-        for retry in range(2):
-            r = session.get(base_url)
-            r.raise_for_status()
+    r = session.get(base_url + '/session?aimGetProp=hostname,gui_str_title_bar,OEMHostName,fwVersion,sysDesc')
+    r.raise_for_status()
+    print(host, r.json['aimGetProp']['hostname'])
 
+    try:
+        for retry in range(3):
             r = session.get(base_url + '/login.html')
             r.raise_for_status()
+            session.post(base_url + '/data/logout')
 
             r = session.post(base_url + '/data/login',
                              data={'user': username, 'password': password})
@@ -44,12 +47,15 @@ def upgrade(host, port, username, password, filename, trustdb=None):
                 blockingTime, = re.search(
                     r'<blockingTime>(\d+)</blockingTime>', r.text).groups()
                 blockingTime = int(blockingTime)
-                sys.stderr.write('login blocked, waiting %d seconds\n' % blockingTime)
+                if blockingTime == 0:
+                    raise RuntimeError('Incorrect username or password')
+                sys.stderr.write(
+                    'login blocked, waiting %d seconds\n' % blockingTime)
                 time.sleep(blockingTime)
             else:
                 raise RuntimeError('Login failure: ' + r.text)
         else:
-            raise RuntimeError('Incorrect username or password')
+            raise RuntimeError('Login retries exceeded')
 
         st1, st2 = re.search(
             r'ST1=([0-9a-f]+),ST2=([0-9a-f]+)', r.text).groups()
