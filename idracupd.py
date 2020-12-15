@@ -86,7 +86,8 @@ def upgrade(host, port, username, password, filenames, trustdb=None):
                 )
             })
             m = MultipartEncoderMonitor(e, status_callback)
-            r = session.post(base_url + scratch_pad + '?ST1=' + st1,
+            r = session.post(base_url + scratch_pad,
+                             params={'ST1': st1},
                              data=m,
                              headers={'Content-Type': m.content_type})
             print(file=sys.stderr)
