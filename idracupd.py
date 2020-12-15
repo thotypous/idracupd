@@ -16,7 +16,7 @@ import os
 import re
 
 
-def upgrade(host, port, username, password, filename, trustdb=None):
+def upgrade(host, port, username, password, filenames, trustdb=None):
     cert = get_server_cert(host, port, trustdb)
     fingerprint = sha256(cert).hexdigest()
 
@@ -76,22 +76,27 @@ def upgrade(host, port, username, password, filename, trustdb=None):
         r = session.get(base_url + scratch_pad + '?splock=1')
         r.raise_for_status()
 
-        e = MultipartEncoder(fields={
-            'firmwareUpdate': (
-                os.path.basename(filename),
-                open(filename, 'rb'),
-                'application/x-ms-dos-executable'
-            )
-        })
-        m = MultipartEncoderMonitor(e, status_callback)
-        r = session.post(base_url + scratch_pad + '?ST1=' + st1,
-                         data=m,
-                         headers={'Content-Type': m.content_type})
-        sys.stderr.write('\n')
-        r.raise_for_status()
-        target, = re.search(r'target="(.*?)"', r.text).groups()
+        for filename in filenames:
+            sys.stderr.write(filename + '\n')
+            e = MultipartEncoder(fields={
+                'firmwareUpdate': (
+                    os.path.basename(filename),
+                    open(filename, 'rb'),
+                    'application/x-ms-dos-executable'
+                )
+            })
+            m = MultipartEncoderMonitor(e, status_callback)
+            r = session.post(base_url + scratch_pad + '?ST1=' + st1,
+                             data=m,
+                             headers={'Content-Type': m.content_type})
+            sys.stderr.write('\n')
+            r.raise_for_status()
 
-        xml = '<Repository><target>%s</target><rebootType>1</rebootType></Repository>' % target
+        # response is cumulative, and contains all files sent until now
+        targets = [m.group(1) for m in re.finditer(r'target="(.*?)"', r.text)]
+
+        xml = '<Repository><target>%s</target><rebootType>1</rebootType></Repository>' % ','.join(
+            target for target in targets if target != '')
         r = session.put(base_url + apply_path, data=xml, headers={'ST2': st2})
         r.raise_for_status()
     finally:
@@ -136,7 +141,7 @@ def main():
     parser.add_argument("--trustdb", help="db containing host certificates")
     parser.add_argument("--port", default=443, type=int)
     parser.add_argument("host", help="iDRAC host")
-    parser.add_argument("filename", help="upgrade to apply")
+    parser.add_argument("filename", help="upgrade(s) to apply", nargs='+')
     args = parser.parse_args()
 
     if not args.username:
