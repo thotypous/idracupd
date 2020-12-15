@@ -55,8 +55,8 @@ def upgrade(host, port, username, password, filenames, trustdb=None):
                 blockingTime = int(blockingTime)
                 if blockingTime == 0:
                     raise RuntimeError('Incorrect username or password')
-                sys.stderr.write(
-                    'login blocked, waiting %d seconds\n' % blockingTime)
+                print('login blocked, waiting %d seconds' %
+                      blockingTime, file=sys.stderr)
                 time.sleep(blockingTime)
             else:
                 raise RuntimeError('Login failure: ' + r.text)
@@ -77,7 +77,7 @@ def upgrade(host, port, username, password, filenames, trustdb=None):
         r.raise_for_status()
 
         for filename in filenames:
-            sys.stderr.write(filename + '\n')
+            print(filename, file=sys.stderr)
             e = MultipartEncoder(fields={
                 'firmwareUpdate': (
                     os.path.basename(filename),
@@ -89,7 +89,7 @@ def upgrade(host, port, username, password, filenames, trustdb=None):
             r = session.post(base_url + scratch_pad + '?ST1=' + st1,
                              data=m,
                              headers={'Content-Type': m.content_type})
-            sys.stderr.write('\n')
+            print(file=sys.stderr)
             r.raise_for_status()
 
         # response is cumulative, and contains all files sent until now
